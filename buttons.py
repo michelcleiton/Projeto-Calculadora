@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 from PySide6.QtWidgets import QPushButton, QGridLayout
 from variables import MEDIUM_FONT_SIZE
-from utils import isNumOrDot, isEmpty, isValidNumber
+from utils import isNumOrDot, isEmpty, isValidNumber, convertToNumber
 from display import Display
 from PySide6.QtCore import Slot
 
@@ -36,7 +36,7 @@ class ButtonsGrid(QGridLayout):
             ["7", "8", "9", "*"],
             ["4", "5", "6", "-"],
             ["1", "2", "3", "+"],
-            ["", "0", ".", "="],
+            ["N", "0", ".", "="],
         ]
         self.display = display
         self.window = window
@@ -58,16 +58,14 @@ class ButtonsGrid(QGridLayout):
         self._equation = value
         self.info.setText(value)
 
-    def vouApagar(self, text):
-        print(f'Signal {text} recebido por "vouApagar" em', type(self).__name__)
 
     # criando grid de botoes. Usando um for para adicionar os caracteres aos botoes
     def _makeGrid(self):
-        self.display.eqPressed.connect(self.vouApagar)
+        self.display.eqPressed.connect(self._eq)
         self.display.delPressed.connect(self.display.backspace)
-        self.display.clearPressed.connect(self.vouApagar)
-        self.display.imputPressed.connect(self.vouApagar)
-        self.display.operatorPressed.connect(self.vouApagar)
+        self.display.clearPressed.connect(self._clear)
+        self.display.imputPressed.connect(self._insertToDisplay)
+        self.display.operatorPressed.connect(self._configLeftOp)
 
         for i, row in enumerate(self._gridMask):
             for j, buttonText in enumerate(row):
@@ -79,7 +77,7 @@ class ButtonsGrid(QGridLayout):
                 self.addWidget(button, i, j)  # aqui o botao recebe o caractere
 
                 # variavel chamando o metodo que chamar a funcao que adia o slot
-                slot = self._makeSlot(self._insertButtonTextToDisplay, button)
+                slot = self._makeSlot(self._insertToDisplay, buttonText)
                 self._connectButtonClicked(button, slot)
 
     def _connectButtonClicked(
@@ -96,9 +94,14 @@ class ButtonsGrid(QGridLayout):
             text == "D"
         ):  # verifica se e o botao e o backspace para apagar da direita p\ esquerda
             self._connectButtonClicked(button, self.display.backspace)
+        if (
+            text == "N"
+        ):  # verifica se e o botao e o 
+            self._connectButtonClicked(button, self._invertNumber)
+        
         if text in "+-/*^":  # verifica se e o botao e um dos operadores
             self._connectButtonClicked(
-                button, self._makeSlot(self._operatorClicked, button)
+                button, self._makeSlot(self._configLeftOp, text)
             )
 
         if text == "=":  # verifica se e o botao e um dos operadores
@@ -110,30 +113,51 @@ class ButtonsGrid(QGridLayout):
             func(*args, **kwargs)
 
         return realSlot
+    
+    # funcao que inverte o número negativo
+    @Slot()
+    def _invertNumber(self):
+        displayText = self.display.text()
+        if not isValidNumber(displayText):
+            return
+        number = convertToNumber(displayText) * -1
+        self.display.setText(str(number))
+        self.display.setFocus()
 
     # funcao que mostra a informação no display quando o botao é clicado
-    def _insertButtonTextToDisplay(self, button):
-        buttonText = button.text()
+    @Slot()
+    def _insertToDisplay(self, text):
         newDisplayValue = (
-            self.display.text() + buttonText
+            self.display.text() + text
         )  # verifica o o que o botao esta tentando inserir
         if not isValidNumber(newDisplayValue):
             return
-        self.display.insert(buttonText)
+        self.display.insert(text)
+        self.display.setFocus()
 
+
+    @Slot()
     def _clear(self):  # metodo para limpar o display
         self.display.clear()
         self._left = None
         self._rigth = None
         self._op = None
         self.equation = self._equationInitilValue
+        self.display.clear()
+        self.display.setFocus()
 
-    def _operatorClicked(
-        self, button
-    ):  # aqui o metodo dos operadores e executado ao clicar no botao
-        buttonText = button.text()  # aqui variavel recebe o operador digitado
+
+    @Slot()
+    def _backspace(self):
+        self.display.backspace()
+        self.display.setFocus()
+
+
+    @Slot()
+    def _configLeftOp(self, text):  # aqui o metodo dos operadores e executado ao clicar no botao
         displayText = self.display.text()  # numero da esquerda left
         self.display.clear()  # limpa o display
+        self.display.setFocus()
         # checa se o operador foi inserido sem ter outro numero antes
         if not isValidNumber(displayText) and self._left is None:
             self._showError("você não digitou nada. ")
@@ -141,17 +165,19 @@ class ButtonsGrid(QGridLayout):
         # se houver numero da esquerda,
         # nao faz nada, aguarda o numero da direita
         if self._left is None:
-            self._left = float(displayText)
-        self._op = buttonText
+            self._left = convertToNumber(displayText)
+        self._op = text
         self.equation = f"{self._left} {self._op} ??"
 
     # metodo executado ao clicar no botao '='
+    @Slot()
     def _eq(self):
         displayText = self.display.text()  # o que tem no display
-        if not isValidNumber(displayText):  # verifica se o caractere e valido
-            self._showError("Sem número para na esquerda")
+        # verifica se o caractere e valido
+        if not isValidNumber(displayText) or self._left is None:
+            self._showError("Conta incompleta")
             return
-        self._rigth = float(displayText)  # caso o numero seja valido
+        self._rigth = convertToNumber(displayText)  # caso o numero seja valido
         self.equation = f"{self._left} {self._op} {self._rigth}"  # mostra os dois numeros e operador
         result = "error"
         try:
@@ -175,6 +201,7 @@ class ButtonsGrid(QGridLayout):
         # define a variavel da direita como None
         # para continuar a conta
         self._rigth = None
+        self.display.setFocus()
         if result == "error":
             self._left = None
 
@@ -184,4 +211,5 @@ class ButtonsGrid(QGridLayout):
         msgBox.setText(text)
         msgBox.setIcon(msgBox.Icon.Critical)
         msgBox.exec()
+        self.display.setFocus()
 

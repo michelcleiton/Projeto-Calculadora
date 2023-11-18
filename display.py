@@ -46,12 +46,12 @@ class Display(QLineEdit):
             self.delPressed.emit()
             return event.ignore()
         if isEsc:
-            #ao pressionar o enter ou return o signal é enviado para a makegrid
+            #ao pressionar o Esc o sinal é enviado ao makegrid
             self.clearPressed.emit()
             return event.ignore()
         
         if isOperator:
-            #ao pressionar o enter ou return o signal é enviado para a makegrid
+            #ao pressionar o P é emitido o sinal de potencicao ao makegrid
             if text.lower() == 'p':
                 text = '^'
             self.operatorPressed.emit(text)
